@@ -110,6 +110,7 @@ class KeycloakWrapper {
           promptValues: ['login'],
           allowInsecureConnections: _keycloakConfig.allowInsecureConnections,
           clientSecret: _keycloakConfig.clientSecret,
+          preferEphemeralSession:true,
         ),
       );
 
