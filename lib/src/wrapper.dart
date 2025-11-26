@@ -13,6 +13,13 @@ class KeycloakWrapper {
   final KeycloakConfig _keycloakConfig;
 
   late final _streamController = StreamController<bool>.broadcast();
+  bool _authState = false;
+  Map<String, dynamic>? _userInfo;
+
+  void _setAuthState(bool value) {
+    _authState = value;
+    _streamController.add(value);
+  }
 
   /// Called whenever an error gets caught.
   ///
@@ -28,8 +35,17 @@ class KeycloakWrapper {
   /// The details from making a successful token exchange.
   TokenResponse? tokenResponse;
 
-  factory KeycloakWrapper({required KeycloakConfig config}) =>
-      _instance ??= KeycloakWrapper._(config);
+  // factory KeycloakWrapper({required KeycloakConfig config}) =>
+  //     _instance ??= KeycloakWrapper._(config);
+  factory KeycloakWrapper({required KeycloakConfig config}) {
+    // 既存 instance の config と比較
+    if (_instance == null || _instance!._keycloakConfig.realm != config.realm) {
+       _secureStorage.deleteAll();
+      _instance?._refreshTimer?.cancel();
+      _instance = KeycloakWrapper._(config);
+    }
+    return _instance!;
+  }
 
   KeycloakWrapper._(this._keycloakConfig);
 
@@ -42,6 +58,8 @@ class KeycloakWrapper {
   ///
   /// Returns true if the user is currently logged in.
   Stream<bool> get authenticationStream => _streamController.stream;
+  bool get authState => _authState;
+  Map<String, dynamic>? get userInfo => _userInfo;
 
   /// Returns the id token string.
   ///
@@ -75,6 +93,19 @@ class KeycloakWrapper {
     }
   }
 
+  /// Sets user information form access token payload.
+  void _setUserInfo(Map<String, dynamic> payload)  {
+    _userInfo ??= {};
+    _userInfo!.addAll({
+      'sub': payload['sub'] ?? '',
+      'username': payload['preferred_username'] ?? '',
+      'firstName': payload['given_name'] ?? '' ,
+      'lastName': payload['family_name'] ?? '',
+      'email': payload['email'] ?? '',
+      'resourceAccess': payload['resource_access']?? {},
+    });
+  }
+
   /// Initializes the user authentication state and refreshes the token.
   Future<void> initialize() async {
     const key = 'keycloak:hasRunBefore';
@@ -82,8 +113,8 @@ class KeycloakWrapper {
     final hasRunBefore = await prefs.getBool(key) ?? false;
 
     if (!hasRunBefore) {
-      _secureStorage.deleteAll();
-      prefs.setBool(key, true);
+      await _secureStorage.deleteAll();
+      await prefs.setBool(key, true);
     }
 
     try {
@@ -98,7 +129,7 @@ class KeycloakWrapper {
   /// Logs the user in.
   ///
   /// Returns true if login is successful.
-  Future<bool> login() async {
+  Future<bool> login({ExternalUserAgent externalUserAgent = ExternalUserAgent.sfSafariViewController}) async {
     _assertInitialization();
     try {
       tokenResponse = await _appAuth.authorizeAndExchangeCode(
@@ -110,6 +141,7 @@ class KeycloakWrapper {
           promptValues: ['login'],
           allowInsecureConnections: _keycloakConfig.allowInsecureConnections,
           clientSecret: _keycloakConfig.clientSecret,
+          externalUserAgent: externalUserAgent,
         ),
       );
 
@@ -125,7 +157,8 @@ class KeycloakWrapper {
         developer.log('Invalid token response.', name: 'keycloak_wrapper');
       }
 
-      _streamController.add(tokenResponse.isValid);
+      //_streamController.add(tokenResponse.isValid);
+      _setAuthState(tokenResponse.isValid);
       return tokenResponse.isValid;
     } catch (e, s) {
       onError('Failed to login.', e, s);
@@ -136,7 +169,7 @@ class KeycloakWrapper {
   /// Logs the user out.
   ///
   /// Returns true if logout is successful.
-  Future<bool> logout() async {
+  Future<bool> logout({ExternalUserAgent externalUserAgent = ExternalUserAgent.sfSafariViewController}) async {
     _assertInitialization();
     try {
       final request = EndSessionRequest(
@@ -144,6 +177,7 @@ class KeycloakWrapper {
         issuer: _keycloakConfig.issuer,
         postLogoutRedirectUrl: _keycloakConfig.redirectUri,
         allowInsecureConnections: _keycloakConfig.allowInsecureConnections,
+        externalUserAgent: externalUserAgent,
       );
 
       await _appAuth.endSession(request);
@@ -151,7 +185,8 @@ class KeycloakWrapper {
       tokenResponse = null;
       _refreshTimer?.cancel();
       _refreshTimer = null;
-      _streamController.add(false);
+      //_streamController.add(false);
+      _setAuthState(false);
       return true;
     } catch (e, s) {
       onError('Failed to logout.', e, s);
@@ -171,12 +206,14 @@ class KeycloakWrapper {
 
     if (securedRefreshToken == null) {
       developer.log('No refresh token found.', name: 'keycloak_wrapper');
-      _streamController.add(false);
+      //_streamController.add(false);
+      _setAuthState(false);
     } else if (JWT
         .decode(securedRefreshToken)
         .willExpired(duration ?? Duration.zero)) {
       developer.log('Expired refresh token', name: 'keycloak_wrapper');
-      _streamController.add(false);
+      //_streamController.add(false);
+      _setAuthState(false);
     } else {
       final isConnected = await hasNetwork();
 
@@ -205,10 +242,12 @@ class KeycloakWrapper {
           developer.log('Invalid token response.', name: 'keycloak_wrapper');
         }
 
-        _streamController.add(tokenResponse.isValid);
+        //_streamController.add(tokenResponse.isValid);
+        _setAuthState(tokenResponse.isValid);
       } else {
         developer.log('No internet connection.', name: 'keycloak_wrapper');
-        _streamController.add(true);
+        //_streamController.add(true);
+        _setAuthState(true);
       }
     }
   }
@@ -233,6 +272,7 @@ class KeycloakWrapper {
 
     if (accessToken != null) {
       final jwt = JWT.decode(accessToken!);
+      _setUserInfo(jwt.payload);
       final remainingTime = jwt.remainingTime;
       if (remainingTime != null && remainingTime.inSeconds > 0) {
         final refreshIn = remainingTime - const Duration(minutes: 1);

@@ -8,13 +8,13 @@ screenshots:
 topics: [ authentication, keycloak, oauth2, openidconnect ]
 
 environment:
-  sdk: ^3.6.0
-  flutter: ">=3.27.0"
+  sdk: ^3.8.1
+  flutter: ">=3.35.5"
 
 dependencies:
   flutter:
     sdk: flutter
-  flutter_appauth: ^9.0.1
+  flutter_appauth: ^11.0.0
   flutter_secure_storage: ^9.2.4
   shared_preferences: ^2.5.3
 
