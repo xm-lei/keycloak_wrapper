@@ -34,7 +34,7 @@ class KeycloakWrapper {
     // 既存 instance の config と比較
     if (_instance == null || _instance!._keycloakConfig.realm != config.realm) {
        _secureStorage.deleteAll();
-      _instance!._refreshTimer?.cancel();
+      _instance?._refreshTimer?.cancel();
       _instance = KeycloakWrapper._(config);
     }
     return _instance!;
