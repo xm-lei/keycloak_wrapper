@@ -12,7 +12,9 @@ class KeycloakWrapper {
 
   final KeycloakConfig _keycloakConfig;
 
-  late final _streamController = StreamController<bool>.broadcast();
+  //late final _streamController = StreamController<bool>.broadcast();
+
+ bool _authState = false;
 
   /// Called whenever an error gets caught.
   ///
@@ -50,7 +52,8 @@ class KeycloakWrapper {
   /// The stream of the user authentication state.
   ///
   /// Returns true if the user is currently logged in.
-  Stream<bool> get authenticationStream => _streamController.stream;
+  //Stream<bool> get authenticationStream => _streamController.stream;
+  bool get authState => _authState;
 
   /// Returns the id token string.
   ///
@@ -134,7 +137,8 @@ class KeycloakWrapper {
         developer.log('Invalid token response.', name: 'keycloak_wrapper');
       }
 
-      _streamController.add(tokenResponse.isValid);
+      //_streamController.add(tokenResponse.isValid);
+      _authState = tokenResponse.isValid;
       return tokenResponse.isValid;
     } catch (e, s) {
       onError('Failed to login.', e, s);
@@ -160,7 +164,8 @@ class KeycloakWrapper {
       tokenResponse = null;
       _refreshTimer?.cancel();
       _refreshTimer = null;
-      _streamController.add(false);
+      //_streamController.add(false);
+      _authState = false;
       return true;
     } catch (e, s) {
       onError('Failed to logout.', e, s);
@@ -180,12 +185,14 @@ class KeycloakWrapper {
 
     if (securedRefreshToken == null) {
       developer.log('No refresh token found.', name: 'keycloak_wrapper');
-      _streamController.add(false);
+      //_streamController.add(false);
+      _authState = false;
     } else if (JWT
         .decode(securedRefreshToken)
         .willExpired(duration ?? Duration.zero)) {
       developer.log('Expired refresh token', name: 'keycloak_wrapper');
-      _streamController.add(false);
+      //_streamController.add(false);
+      _authState = false;
     } else {
       final isConnected = await hasNetwork();
 
@@ -214,10 +221,12 @@ class KeycloakWrapper {
           developer.log('Invalid token response.', name: 'keycloak_wrapper');
         }
 
-        _streamController.add(tokenResponse.isValid);
+        //_streamController.add(tokenResponse.isValid);
+        _authState = tokenResponse.isValid;
       } else {
         developer.log('No internet connection.', name: 'keycloak_wrapper');
-        _streamController.add(true);
+        //_streamController.add(true);
+        _authState = true;
       }
     }
   }
