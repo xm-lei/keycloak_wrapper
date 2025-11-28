@@ -28,8 +28,17 @@ class KeycloakWrapper {
   /// The details from making a successful token exchange.
   TokenResponse? tokenResponse;
 
-  factory KeycloakWrapper({required KeycloakConfig config}) =>
-      _instance ??= KeycloakWrapper._(config);
+  // factory KeycloakWrapper({required KeycloakConfig config}) =>
+  //     _instance ??= KeycloakWrapper._(config);
+  factory KeycloakWrapper({required KeycloakConfig config}) {
+    // 既存 instance の config と比較
+    if (_instance == null || _instance!._keycloakConfig.realm != config.realm) {
+       _secureStorage.deleteAll();
+      _instance!._refreshTimer?.cancel();
+      _instance = KeycloakWrapper._(config);
+    }
+    return _instance!;
+  }
 
   KeycloakWrapper._(this._keycloakConfig);
 
@@ -82,8 +91,8 @@ class KeycloakWrapper {
     final hasRunBefore = await prefs.getBool(key) ?? false;
 
     if (!hasRunBefore) {
-      _secureStorage.deleteAll();
-      prefs.setBool(key, true);
+      await _secureStorage.deleteAll();
+      await prefs.setBool(key, true);
     }
 
     try {
@@ -110,7 +119,6 @@ class KeycloakWrapper {
           promptValues: ['login'],
           allowInsecureConnections: _keycloakConfig.allowInsecureConnections,
           clientSecret: _keycloakConfig.clientSecret,
-          preferEphemeralSession:true,
         ),
       );
 
